@@ -3,12 +3,32 @@ import type {NextConfig} from 'next';
 const nextConfig: NextConfig = {
   /* config options here */
   devIndicators: false,
-  serverExternalPackages: ['face-api.js'],
   typescript: {
     ignoreBuildErrors: true,
   },
   eslint: {
     ignoreDuringBuilds: true,
+  },
+  webpack: (config, { isServer }) => {
+    if (isServer) {
+      // Ignorar face-api.js y tensorflow en el servidor
+      config.externals = config.externals || [];
+      config.externals.push({
+        'face-api.js': 'commonjs face-api.js',
+        '@tensorflow/tfjs-node': 'commonjs @tensorflow/tfjs-node',
+      });
+    }
+    
+    // Fallbacks para módulos de Node.js que no existen en el navegador
+    config.resolve.fallback = {
+      ...config.resolve.fallback,
+      fs: false,
+      encoding: false,
+      path: false,
+      os: false,
+    };
+    
+    return config;
   },
   images: {
     remotePatterns: [

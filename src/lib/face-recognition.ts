@@ -1,11 +1,26 @@
 /**
  * Servicio de Reconocimiento Facial Real usando face-api.js
  * Extrae embeddings faciales y compara con base de datos
+ * NOTA: Solo funciona en el navegador (cliente)
  */
 
-import * as faceapi from 'face-api.js';
-
+// Variable para almacenar faceapi cuando se cargue dinámicamente
+let faceapi: typeof import('face-api.js') | null = null;
 let modelsLoaded = false;
+
+/**
+ * Carga face-api.js dinámicamente (solo en el navegador)
+ */
+async function loadFaceApi() {
+  if (typeof window === 'undefined') {
+    throw new Error('face-api.js solo puede usarse en el navegador');
+  }
+  
+  if (!faceapi) {
+    faceapi = await import('face-api.js');
+  }
+  return faceapi;
+}
 
 /**
  * Carga los modelos de ML necesarios para reconocimiento facial
@@ -14,13 +29,15 @@ let modelsLoaded = false;
 export async function loadFaceModels(): Promise<void> {  
   if (modelsLoaded) return;
   
+  const api = await loadFaceApi();
+  
   try {
     const MODEL_URL = '/models'; // Los modelos se descargarán en /public/models
     
     await Promise.all([
-      faceapi.nets.ssdMobilenetv1.loadFromUri(MODEL_URL),
-      faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
-      faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL),
+      api.nets.ssdMobilenetv1.loadFromUri(MODEL_URL),
+      api.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
+      api.nets.faceRecognitionNet.loadFromUri(MODEL_URL),
     ]);
     
     modelsLoaded = true;
@@ -41,7 +58,8 @@ export async function extractFaceDescriptor(
 ): Promise<Float32Array | null> {
   await loadFaceModels();
   
-  const detection = await faceapi
+  const api = await loadFaceApi();
+  const detection = await api
     .detectSingleFace(imageElement)
     .withFaceLandmarks()
     .withFaceDescriptor();
@@ -58,11 +76,12 @@ export async function extractFaceDescriptor(
  * Distancia < 0.6 = mismo rostro
  * Distancia > 0.6 = rostros diferentes
  */
-export function compareFaces(
+export async function compareFaces(
   descriptor1: Float32Array,
   descriptor2: Float32Array
-): number {
-  return faceapi.euclideanDistance(descriptor1, descriptor2);
+): Promise<number> {
+  const api = await loadFaceApi();
+  return api.euclideanDistance(descriptor1, descriptor2);
 }
 
 /**
@@ -81,7 +100,7 @@ export interface FaceMatch {
   confidence: number;
 }
 
-export function findBestMatch(
+export async function findBestMatch(
   faceDescriptor: Float32Array,
   database: Array<{
     id: string;
@@ -91,13 +110,14 @@ export function findBestMatch(
     descriptor: number[];
   }>,
   threshold: number = 0.6
-): FaceMatch | null {
+): Promise<FaceMatch | null> {
+  const api = await loadFaceApi();
   let bestMatch: FaceMatch | null = null;
   let minDistance = threshold;
   
   for (const person of database) {
     const dbDescriptor = new Float32Array(person.descriptor);
-    const distance = compareFaces(faceDescriptor, dbDescriptor);
+    const distance = api.euclideanDistance(faceDescriptor, dbDescriptor);
     
     if (distance < minDistance) {
       minDistance = distance;
@@ -137,6 +157,7 @@ export async function detectFace(
 ): Promise<boolean> {
   await loadFaceModels();
   
-  const detection = await faceapi.detectSingleFace(imageElement);
+  const api = await loadFaceApi();
+  const detection = await api.detectSingleFace(imageElement);
   return detection !== undefined;
 }
